@@ -8,22 +8,25 @@ route.use(cors());
 route.use(express.json());
 
 // Ensure the table exists
-db.createTable("profile", ["Fullname", "Email", "Mode", "Number","level"]);
+db.createTable("profile", ["Fullname", "Email", "Mode", "Number", "level"]);
 
 // ✅ CREATE PROFILE ENDPOINT
 route.post("/createProfile", async (req, res) => {
   try {
-    const { fullName, email, mode, number, password , level} = req.body;
+    const { fullName, email, mode, number, password, level } = req.body;
 
     if (!fullName || !email || !mode || !number || !password) {
       return res.status(400).json({ error: "All fields are required" });
     }
+
+    // Authenticate user first
     try {
       await db.authLogin({ email, password });
     } catch (err) {
       return res.status(400).json({ error: "User has no account" });
     }
 
+    // Check if profile exists already
     const existing = await db.findBy("profile", "Email", email);
     if (existing) {
       return res.status(400).json({ error: "Profile already exists" });
@@ -34,7 +37,7 @@ route.post("/createProfile", async (req, res) => {
       Email: email,
       Mode: mode,
       Number: number,
-      level:level,
+      level: level,
     });
 
     return res.status(201).json({ message: "Profile created successfully" });
@@ -72,6 +75,44 @@ route.post("/getProfile", async (req, res) => {
     });
   } catch (err) {
     console.error("Profile retrieval error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ✅ UPDATE PROFILE ENDPOINT
+route.put("/updateProfile", async (req, res) => {
+  try {
+    const { email, password, fullName, mode, number, level } = req.body;
+
+    if (!email || !password)
+      return res.status(400).json({ error: "Email and password required" });
+
+    // Authenticate user
+    try {
+      await db.authLogin({ email, password });
+    } catch (err) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Check if profile exists
+    const existing = await db.findBy("profile", "Email", email);
+    if (!existing) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    // Build update object dynamically (only update provided fields)
+    const updateData = {};
+    if (fullName) updateData.Fullname = fullName;
+    if (mode) updateData.Mode = mode;
+    if (number) updateData.Number = number;
+    if (level) updateData.level = level;
+
+    // Update in database
+    await db.update("profile", updateData, "Email", email);
+
+    return res.status(200).json({ message: "Profile updated successfully" });
+  } catch (err) {
+    console.error("Profile update error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
