@@ -1,321 +1,240 @@
-# 🏠 DormDash Backend API Documentation
+# DormDash Backend API Documentation
 
-This document describes how to use the **DormDash Backend API**, built
-with Express.js and SQLite via the custom `SqliteAuto` library.
+This document explains how to use the **DormDash Backend API**, built using Express.js and a custom SQLite wrapper (`SqliteAuto`).
 
-------------------------------------------------------------------------
+---
 
-## 🚀 Base URL
+## 📦 Overview
 
-    http://localhost:2100
+The API allows for managing users, profiles, and authentication through a simple local database system (`SQLite`).  
+It includes endpoints for:
+- Authentication (`signup`, `login`)
+- Profile creation and retrieval
+- Secure data handling using bcrypt
 
-------------------------------------------------------------------------
+---
 
-## 📂 Endpoints Overview
+## 🚀 Setup
 
-  -------------------------------------------------------------------------------
-  Module          Endpoint                   Method        Description
-  --------------- -------------------------- ------------- ----------------------
-  Auth            `/auth/signup`             POST          Create a new account
+### Prerequisites
+- Node.js (v16+)
+- npm or yarn
 
-  Auth            `/auth/login`              POST          Login to existing
-                                                           account
+### Installation
 
-  Profile         `/profile/createProfile`   POST          Create user profile
+```bash
+git clone <your_repo_url>
+cd DormDash_Backend
+npm install
+```
 
-  Profile         `/profile/getProfile`      POST          Fetch profile data
+### Run Server
 
-  Product         `/product/create`          POST          Create new product
-                                                           listing
+```bash
+node index.js
+```
+or, if you use nodemon:
+```bash
+npx nodemon index.js
+```
 
-  Product         `/product/all`             GET           Get all product
-                                                           listings
+---
 
-  Product         `/product/get/:id`         GET           Get product by ID
+## ⚙️ Database Structure (via `SqliteAuto`)
 
-  Product         `/product/getByLogin`      POST          Get all products owned
-                                                           by user
+The `SqliteAuto` class automatically initializes and manages SQLite tables.
 
-  Product         `/product/delete/:id`      DELETE        Delete product
-                                                           (creator only)
-  -------------------------------------------------------------------------------
+| Table Name | Fields |
+|-------------|---------|
+| `users` | id, email, password |
+| `profile` | Fullname, Email, Mode, Number, level |
 
-------------------------------------------------------------------------
+---
 
-## 🧩 Authentication Endpoints
+## 🔐 Authentication Routes
 
-### **POST /auth/signup**
+### `POST /signup`
 
 Creates a new user account.
 
-**Body Example:**
-
-``` json
+**Request Body:**
+```json
 {
-  "email": "user@example.com",
-  "password": "mypassword"
+  "email": "john@example.com",
+  "password": "123456"
 }
 ```
 
 **Response:**
-
-``` json
+```json
 {
-  "Message": "Account Created Successfully"
+  "message": "User created successfully"
 }
 ```
 
-------------------------------------------------------------------------
+### `POST /login`
 
-### **POST /auth/login**
+Logs in an existing user.
 
-Logs in a user.
-
-**Body Example:**
-
-``` json
+**Request Body:**
+```json
 {
-  "email": "user@example.com",
-  "password": "mypassword"
+  "email": "john@example.com",
+  "password": "123456"
 }
 ```
 
 **Response:**
-
-``` json
+```json
 {
-  "Message": "Login Successfully"
+  "message": "Login successful"
 }
 ```
 
-------------------------------------------------------------------------
+---
 
-## 👤 Profile Endpoints
+## 👤 Profile Routes
 
-### **POST /profile/createProfile**
+### `POST /createProfile`
 
-Creates a profile for a logged-in user.
+Creates a profile for an authenticated user.
 
-**Body Example:**
-
-``` json
+**Request Body:**
+```json
 {
   "fullName": "John Doe",
   "email": "john@example.com",
-  "mode": "Student",
+  "mode": "Hostel",
   "number": "08123456789",
-  "password": "mypassword",
+  "password": "123456",
   "level": "400"
 }
 ```
 
 **Response:**
-
-``` json
+```json
 {
   "message": "Profile created successfully"
 }
 ```
 
-------------------------------------------------------------------------
+### `POST /getProfile`
 
-### **POST /profile/getProfile**
+Retrieves a user’s profile after verifying credentials.
 
-Fetch profile by email & password.
-
-**Body Example:**
-
-``` json
+**Request Body:**
+```json
 {
   "email": "john@example.com",
-  "password": "mypassword"
+  "password": "123456"
 }
 ```
 
 **Response:**
-
-``` json
+```json
 {
   "Fullname": "John Doe",
   "Email": "john@example.com",
-  "Mode": "Student",
+  "Mode": "Hostel",
   "Number": "08123456789",
   "level": "400"
 }
 ```
 
-------------------------------------------------------------------------
+### `POST /updateProfile`
 
-## 🏘️ Product Endpoints
+Updates an existing user’s profile.
 
-### **POST /product/create**
-
-Create a new product listing.
-
-**Body Example:**
-
-``` json
-{
-  "title": "2 Bedroom Apartment",
-  "type": "Apartment",
-  "location": "Port Harcourt",
-  "rent": 250000,
-  "bedrooms": 2,
-  "availability": "Available",
-  "amnities": ["Water", "Electricity"],
-  "boost": 0,
-  "description": "Spacious apartment with water and light.",
-  "contactinfo": "08123456789",
-  "pictures": ["img1.jpg", "img2.jpg"],
-  "owneremail": "john@example.com"
-}
-```
-
-**Response:**
-
-``` json
-{
-  "message": "✅ Product created successfully"
-}
-```
-
-------------------------------------------------------------------------
-
-### **GET /product/all**
-
-Fetch all product listings.
-
-**Response Example:**
-
-``` json
-[
-  {
-    "id": 1,
-    "title": "2 Bedroom Apartment",
-    "type": "Apartment",
-    "rent": 250000,
-    "amnities": ["Water", "Electricity"],
-    "pictures": ["img1.jpg", "img2.jpg"]
-  }
-]
-```
-
-------------------------------------------------------------------------
-
-### **GET /product/get/:id**
-
-Fetch a specific product by ID.
-
-**Example URL:**
-
-    /product/get/1
-
-**Response:**
-
-``` json
-{
-  "id": 1,
-  "title": "2 Bedroom Apartment",
-  "owneremail": "john@example.com"
-}
-```
-
-------------------------------------------------------------------------
-
-### **POST /product/getByLogin**
-
-Fetch all products created by a logged-in user.
-
-**Body Example:**
-
-``` json
+**Request Body:**
+```json
 {
   "email": "john@example.com",
-  "password": "mypassword"
-}
-```
-
-**Response Example:**
-
-``` json
-[
-  {
-    "id": 1,
-    "title": "2 Bedroom Apartment",
-    "owneremail": "john@example.com"
+  "password": "123456",
+  "updates": {
+    "Fullname": "John Updated",
+    "Number": "09099999999",
+    "level": "500"
   }
-]
-```
-
-------------------------------------------------------------------------
-
-### **DELETE /product/delete/:id**
-
-Delete a product (only if you're the creator).
-
-**Body Example:**
-
-``` json
-{
-  "email": "john@example.com",
-  "password": "mypassword"
 }
 ```
 
 **Response:**
-
-``` json
+```json
 {
-  "message": "🗑️ Product deleted successfully"
+  "message": "Profile updated successfully"
 }
 ```
 
-**Error (not creator):**
+---
 
-``` json
-{
-  "error": "⛔ You are not the creator of this product"
+## 💻 Example: Calling the API in JavaScript (Frontend)
+
+```javascript
+// Base URL of your backend
+const BASE_URL = "http://localhost:5000";
+
+// Create a new profile
+async function createProfile() {
+  const res = await fetch(`${BASE_URL}/createProfile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fullName: "John Doe",
+      email: "john@example.com",
+      mode: "Hostel",
+      number: "08123456789",
+      password: "123456",
+      level: "400"
+    })
+  });
+  const data = await res.json();
+  console.log(data);
+}
+
+// Get a user profile
+async function getProfile() {
+  const res = await fetch(`${BASE_URL}/getProfile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: "john@example.com",
+      password: "123456"
+    })
+  });
+  const data = await res.json();
+  console.log(data);
+}
+
+// Update a user profile
+async function updateProfile() {
+  const res = await fetch(`${BASE_URL}/updateProfile`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: "john@example.com",
+      password: "123456",
+      updates: {
+        Fullname: "John Updated",
+        level: "500"
+      }
+    })
+  });
+  const data = await res.json();
+  console.log(data);
 }
 ```
 
-------------------------------------------------------------------------
+---
 
-## ⚙️ Setup Instructions
+## 🧠 Notes
+- Only authenticated users can create or modify their profiles.
+- Passwords are securely hashed via bcrypt in the `SqliteAuto` class.
+- Make sure to configure CORS correctly for your frontend.
 
-1.  Install dependencies:
+---
 
-    ``` bash
-    npm install express cors bcryptjs sqlite3
-    ```
-
-2.  Run the server:
-
-    ``` bash
-    node server.js
-    ```
-
-3.  Base file structure:
-
-        ├── database/
-        │   └── SqliteAuto.js
-        ├── routes/
-        │   ├── auth.js
-        │   ├── profile.js
-        │   └── properties.js
-        ├── server.js
-        └── dormDash.db
-
-------------------------------------------------------------------------
-
-## 🧠 Developer Notes
-
--   All data is persisted in SQLite.
--   Only product creators can delete their listings.
--   Arrays like `amnities` and `pictures` are stored as JSON strings.
--   Authentication uses `authSignUp` and `authLogin` from `SqliteAuto`.
-
-------------------------------------------------------------------------
-
-**Author:** Chijioke Mekelachi\
-**Email:** mekelachichijioke@gmail.com\
-**Project:** DormDash (Backend)
+**Author:** Chijioke Mekelachi  
+**Project:** DormDash Backend  
+**Database:** SQLite  
+**Framework:** Express.js  
+**Language:** JavaScript (Node.js)
