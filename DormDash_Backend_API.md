@@ -237,4 +237,4 @@ async function updateProfile() {
 **Project:** DormDash Backend  
 **Database:** SQLite  
 **Framework:** Express.js  
-**Language:** JavaScript (Node.js)
+**Language:** JavaScript (Node.js) 

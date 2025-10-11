@@ -1,7 +1,6 @@
 const sqlite3 = require("sqlite3").verbose();
 const fs = require("fs");
 const bcrypt = require("bcryptjs");
-const { error } = require("console");
 
 class SqliteAuto {
   constructor() {
@@ -40,6 +39,7 @@ class SqliteAuto {
     this.db = new sqlite3.Database(dbFile, (err) => {
       if (err) console.error("❌ Database init error:", err.message);
       else console.log(`✅ Database '${dbFile}' initialized`);
+
       if (auth) {
         this.db.run(
           `CREATE TABLE IF NOT EXISTS userAuth (
@@ -66,87 +66,142 @@ class SqliteAuto {
 
   async authLogin({ email, password }) {
     const user = await this._get(`SELECT * FROM userAuth WHERE email = ?`, [email]);
-    if (!user) {
-        throw new Error("User not found");
-    }
+    if (!user) throw new Error("User not found");
+
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) throw new Error("Invalid password");
+
     return user;
   }
 
-async createTable(tableName, columns = []) {
-  const schema = columns
-    .map((col) => {
-      let [name, type] = col.split(":");
-      name = name.trim();
-      type = type ? type.trim().toLowerCase() : "text";
+  async updatePassword({ email, newPassword, oldPassword }) {
+    // ❌ Fixed condition: previously always threw error even with correct args
+    if (!email || !newPassword || !oldPassword) {
+      throw new Error("3 arguments required: email, newPassword, oldPassword");
+    }
 
-      switch (type) {
-        case "int":
-        case "integer":
-        case "num":
-        case "number":
-          type = "INTEGER";
-          break;
+    // Ensure old password is valid
+    await this.authLogin({ email, password: oldPassword });
 
-        case "float":
-        case "double":
-        case "real":
-          type = "REAL";
-          break;
+    // Hash new password before updating
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-        // For array types — store as TEXT (JSON string) but remember the subtype
-        case "arr":
-        case "array":
-        case "intarr":
-        case "numarr":
-        case "numberarr":
-        case "textarr":
-          type = "TEXT";
-          break;
+    await this.update("userAuth", { password: hashedNewPassword }, { email });
+    console.log(`✅ Password updated for '${email}'`);
+  }
 
-        default:
-          type = "TEXT";
-          break;
-      }
+  async createTable(tableName, columns = []) {
+    const schema = columns
+      .map((col) => {
+        let [name, type] = col.split(":");
+        name = name.trim();
+        type = type ? type.trim().toLowerCase() : "text";
 
-      return `${name} ${type}`;
-    })
-    .join(", ");
+        switch (type) {
+          case "int":
+          case "integer":
+          case "num":
+          case "number":
+            type = "INTEGER";
+            break;
+          case "float":
+          case "double":
+          case "real":
+            type = "REAL";
+            break;
+          case "arr":
+          case "array":
+          case "intarr":
+          case "numarr":
+          case "numberarr":
+          case "textarr":
+            type = "TEXT"; // store arrays as JSON text
+            break;
+          default:
+            type = "TEXT";
+            break;
+        }
 
-  await this._run(
-    `CREATE TABLE IF NOT EXISTS ${tableName} (id INTEGER PRIMARY KEY AUTOINCREMENT, ${schema})`
-  );
+        return `${name} ${type}`;
+      })
+      .join(", ");
 
-  console.log(`✅ Table '${tableName}' created with schema: ${schema}`);
-}
+    await this._run(
+      `CREATE TABLE IF NOT EXISTS ${tableName} (id INTEGER PRIMARY KEY AUTOINCREMENT, ${schema})`
+    );
 
+    console.log(`✅ Table '${tableName}' created with schema: ${schema}`);
+  }
 
   insert(tableName, data = {}) {
     const keys = Object.keys(data);
     const placeholders = keys.map(() => "?").join(",");
     const values = Object.values(data);
-    return this._run(`INSERT INTO ${tableName} (${keys.join(",")}) VALUES (${placeholders})`, values);
+    return this._run(
+      `INSERT INTO ${tableName} (${keys.join(",")}) VALUES (${placeholders})`,
+      values
+    );
   }
 
+  // Compatibility: readAll is the underlying implementation. Expose getAll as routes expect it.
   readAll(tableName) {
     return this._all(`SELECT * FROM ${tableName}`);
   }
 
+  // Alias expected by routes
+  getAll(tableName) {
+    return this.readAll(tableName);
+  }
+
+  // findBy returns a single row (uses _get) — routes expect a single object when looking up by unique column
   findBy(tableName, column, value) {
+    return this._get(`SELECT * FROM ${tableName} WHERE ${column} = ?`, [value]);
+  }
+
+  // findAllBy returns an array of rows matching a column
+  findAllBy(tableName, column, value) {
     return this._all(`SELECT * FROM ${tableName} WHERE ${column} = ?`, [value]);
   }
 
-  update(tableName, updates = {}, where = {}) {
-    const setClause = Object.keys(updates).map((k) => `${k} = ?`).join(", ");
-    const whereClause = Object.keys(where).map((k) => `${k} = ?`).join(" AND ");
-    const values = [...Object.values(updates), ...Object.values(where)];
+  // Update supports either: update(table, updates, { col: val }) OR update(table, updates, colName, value)
+  update(tableName, updates = {}, where = {}, whereValue) {
+    const setClause = Object.keys(updates)
+      .map((k) => `${k} = ?`)
+      .join(", ");
+
+    let whereClause = "";
+    let values = [];
+
+    if (typeof where === "string") {
+      // called as (table, updates, column, value)
+      whereClause = `${where} = ?`;
+      values = [...Object.values(updates), whereValue];
+    } else {
+      // called as (table, updates, { col: val, ... })
+      whereClause = Object.keys(where)
+        .map((k) => `${k} = ?`)
+        .join(" AND ");
+      values = [...Object.values(updates), ...Object.values(where)];
+    }
+
     return this._run(`UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`, values);
   }
 
-  delete(tableName, where = {}) {
-    const whereClause = Object.keys(where).map((k) => `${k} = ?`).join(" AND ");
-    const values = Object.values(where);
+  // Delete supports either: delete(table, { col: val }) OR delete(table, colName, value)
+  delete(tableName, where = {}, value) {
+    let whereClause = "";
+    let values = [];
+
+    if (typeof where === "string") {
+      whereClause = `${where} = ?`;
+      values = [value];
+    } else {
+      whereClause = Object.keys(where)
+        .map((k) => `${k} = ?`)
+        .join(" AND ");
+      values = Object.values(where);
+    }
+
     return this._run(`DELETE FROM ${tableName} WHERE ${whereClause}`, values);
   }
 }
