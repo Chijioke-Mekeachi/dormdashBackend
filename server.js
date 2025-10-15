@@ -19,7 +19,8 @@ if (!fs.existsSync(uploadDir)) {
 app.use('/uploads', express.static(uploadDir));
 
 // Initialize database
-db.init("dormDash.db", true);
+db.init(":memory:", true);
+
 
 // Routes
 app.get('/', (req, res) => {
