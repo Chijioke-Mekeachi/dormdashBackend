@@ -65,7 +65,9 @@ class SqliteAuto {
   }
 
   async authLogin({ email, password }) {
-    const user = await this._get(`SELECT * FROM userAuth WHERE email = ?`, [email]);
+    const user = await this._get(`SELECT * FROM userAuth WHERE email = ?`, [
+      email,
+    ]);
     if (!user) throw new Error("User not found");
 
     const valid = await bcrypt.compare(password, user.password);
@@ -137,10 +139,12 @@ class SqliteAuto {
     const keys = Object.keys(data);
     const placeholders = keys.map(() => "?").join(",");
     const values = Object.values(data);
-    return this._run(
-      `INSERT INTO ${tableName} (${keys.join(",")}) VALUES (${placeholders})`,
-      values
-    );
+
+    const sql = `INSERT INTO ${tableName} (${keys
+      .map((k) => `"${k}"`)
+      .join(",")}) VALUES (${placeholders})`;
+    console.log("Executing SQL:", sql, values); // for debugging
+    return this._run(sql, values);
   }
 
   // Compatibility: readAll is the underlying implementation. Expose getAll as routes expect it.
@@ -184,8 +188,30 @@ class SqliteAuto {
       values = [...Object.values(updates), ...Object.values(where)];
     }
 
-    return this._run(`UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`, values);
+    return this._run(
+      `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`,
+      values
+    );
   }
+  // Count rows matching 2 conditions
+async countWhere(table, emailField, emailValue, statusField, statusValue) {
+  const sql = `SELECT COUNT(*) as count FROM ${table} WHERE ${emailField} = ? AND ${statusField} = ?`;
+  const result = await this._get(sql, [emailValue, statusValue]);
+  return result ? result.count : 0;
+}
+
+// Count rows matching a single condition
+async countWhereSimple(table, field, value) {
+  const sql = `SELECT COUNT(*) as count FROM ${table} WHERE ${field} = ?`;
+  const result = await this._get(sql, [value]);
+  return result ? result.count : 0;
+}
+
+// Find all by field
+async findAllBy(table, field, value) {
+  const sql = `SELECT * FROM ${table} WHERE ${field} = ?`;
+  return await this._all(sql, [value]);
+}
 
   // Delete supports either: delete(table, { col: val }) OR delete(table, colName, value)
   delete(tableName, where = {}, value) {

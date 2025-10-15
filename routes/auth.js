@@ -3,7 +3,7 @@ const cors = require("cors");
 const db = require("../database/SqliteAuto");
 const jwt = require("jsonwebtoken");
 const route = express.Router();
-
+const bcrypt = require("bcryptjs");
 route.use(cors());
 route.use(express.json());
 
@@ -13,17 +13,22 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 const REFRESH_SECRET = process.env.REFRESH_SECRET || "dev_refresh_secret";
 
 function signAccess(user) {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "1h" });
+  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+    expiresIn: "1h",
+  });
 }
 
 function signRefresh(user) {
-  return jwt.sign({ id: user.id, email: user.email }, REFRESH_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ id: user.id, email: user.email }, REFRESH_SECRET, {
+    expiresIn: "7d",
+  });
 }
 
 route.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: "email and password required" });
+    if (!email || !password)
+      return res.status(400).json({ error: "email and password required" });
 
     let userRecord;
     try {
@@ -48,7 +53,8 @@ route.post("/login", async (req, res) => {
 route.post("/signup", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: "email and password required" });
+    if (!email || !password)
+      return res.status(400).json({ error: "email and password required" });
 
     try {
       await db.authSignUp(email, password);
@@ -64,8 +70,10 @@ route.post("/signup", async (req, res) => {
 
 route.post("/refresh", async (req, res) => {
   const { refreshToken } = req.body;
-  if (!refreshToken) return res.status(400).json({ error: "refreshToken required" });
-  if (!refreshTokens.has(refreshToken)) return res.status(403).json({ error: "Invalid refresh token" });
+  if (!refreshToken)
+    return res.status(400).json({ error: "refreshToken required" });
+  if (!refreshTokens.has(refreshToken))
+    return res.status(403).json({ error: "Invalid refresh token" });
 
   try {
     const payload = jwt.verify(refreshToken, REFRESH_SECRET);
@@ -88,6 +96,26 @@ route.post("/logout", (req, res) => {
 
 route.get("/test", (req, res) => {
   return res.json({ result: "success" });
+});
+
+route.post("/update", async (req, res) => {
+  try {
+    console.log(`started here`)
+    const { email, password, newPassword } = req.body;
+    userRecord = await db.authLogin({ email, password });
+    console.log("again here")
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+    console.log("here happened")
+    await db.updatePassword({
+      email: email,
+      oldPassword: password,
+      newPassword: newPassword,
+    })
+    console.log(`nothing here`)
+    return res.status(201).json({ message: "Updated Password successfully" });
+  } catch (err) {
+    return res.status(500).json({ message: "Error Updating Password" });
+  }
 });
 
 module.exports = route;

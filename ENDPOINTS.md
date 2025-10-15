@@ -90,7 +90,7 @@ Base URL: http://localhost:2100
 ---
 
 Notes:
-- Authentication is implemented by calling `db.authLogin({ email, password })` — this is a synchronous check implemented in `database/SqliteAuto.js`.
+- Authentication is implemented by calling `db.authLogin({ email, password })` — this is a synchronous check implemented in `database/ SqliteAuto.js`.
 - The `product` table stores `amnities` and `pictures` as JSON-serialized arrays in the database; route handlers parse them back to arrays before responding.
 
 If you'd like, I can:

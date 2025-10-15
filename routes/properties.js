@@ -1,20 +1,21 @@
 const express = require("express");
 const cors = require("cors");
 const db = require("../database/SqliteAuto");
+const multer = require("multer");
+const path = require("path");
 
 const route = express.Router();
 route.use(cors());
 route.use(express.json());
 
-const multer = require('multer');
-const path = require('path');
+// Configure Multer for image uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
+  destination: (req, file, cb) => cb(null, path.join(__dirname, "../uploads")),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
 const upload = multer({ storage });
 
-// Create table with typed columns
+// ✅ Create table with typed columns
 db.createTable("product", [
   "title",
   "type",
@@ -27,17 +28,15 @@ db.createTable("product", [
   "description:text",
   "contactinfo:text",
   "pictures:textarr",
-  "owneremail:text" // links product to creator
+  "owneremail:text",
 ]);
 
 // ✅ CREATE PRODUCT
 route.post("/create", async (req, res) => {
   try {
     const product = req.body;
-
-    if (!product.title || !product.type || !product.rent || !product.owneremail) {
+    if (!product.title || !product.type || !product.rent || !product.owneremail)
       return res.status(400).json({ error: "Missing required fields" });
-    }
 
     if (Array.isArray(product.amnities))
       product.amnities = JSON.stringify(product.amnities);
@@ -45,11 +44,10 @@ route.post("/create", async (req, res) => {
       product.pictures = JSON.stringify(product.pictures);
 
     await db.insert("product", product);
-
-    return res.status(201).json({ message: "✅ Product created successfully" });
+    res.status(201).json({ message: "✅ Property created successfully" });
   } catch (err) {
     console.error("Error creating product:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -57,31 +55,29 @@ route.post("/create", async (req, res) => {
 route.get("/all", async (req, res) => {
   try {
     const data = await db.getAll("product");
-
     const parsed = data.map((p) => ({
       ...p,
       amnities: p.amnities ? JSON.parse(p.amnities) : [],
       pictures: p.pictures ? JSON.parse(p.pictures) : [],
     }));
-
-    return res.status(200).json(parsed);
+    res.json(parsed);
   } catch (err) {
-    console.error("Error fetching products:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("Error fetching all products:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// SEARCH products
-route.get('/search', async (req, res) => {
+// ✅ SEARCH PRODUCTS
+route.get("/search", async (req, res) => {
   try {
     const { q, location, propertyType, minPrice, maxPrice } = req.query;
-    // Simple server-side filter: fetch all and filter in memory (small dataset)
-    let data = await db.getAll('product');
-    if (q) data = data.filter(p => (p.title||'').toLowerCase().includes(q.toLowerCase()));
-    if (location) data = data.filter(p => (p.location||'').toLowerCase().includes(location.toLowerCase()));
-    if (propertyType) data = data.filter(p => (p.type||'').toLowerCase() === propertyType.toLowerCase());
-    if (minPrice) data = data.filter(p => Number(p.rent) >= Number(minPrice));
-    if (maxPrice) data = data.filter(p => Number(p.rent) <= Number(maxPrice));
+    let data = await db.getAll("product");
+
+    if (q) data = data.filter((p) => (p.title || "").toLowerCase().includes(q.toLowerCase()));
+    if (location) data = data.filter((p) => (p.location || "").toLowerCase().includes(location.toLowerCase()));
+    if (propertyType) data = data.filter((p) => (p.type || "").toLowerCase() === propertyType.toLowerCase());
+    if (minPrice) data = data.filter((p) => Number(p.rent) >= Number(minPrice));
+    if (maxPrice) data = data.filter((p) => Number(p.rent) <= Number(maxPrice));
 
     const parsed = data.map((p) => ({
       ...p,
@@ -89,97 +85,105 @@ route.get('/search', async (req, res) => {
       pictures: p.pictures ? JSON.parse(p.pictures) : [],
     }));
 
-    return res.json({ results: parsed, total: parsed.length });
+    res.json({ results: parsed, total: parsed.length });
   } catch (err) {
-    console.error('search error', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Search error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// GET properties for owner (by auth or owneremail query)
-route.get('/owner/:ownerEmail', async (req, res) => {
+// ✅ GET PROPERTIES BY OWNER
+route.get("/owner/:ownerEmail", async (req, res) => {
   try {
-    const ownerEmail = req.params.ownerEmail || req.query.ownerEmail;
-    if (!ownerEmail) return res.status(400).json({ error: 'ownerEmail required' });
-    const data = await db.findAllBy('product', 'owneremail', ownerEmail);
+    const ownerEmail = req.params.ownerEmail;
+    const data = await db.findAllBy("product", "owneremail", ownerEmail);
     const parsed = data.map((p) => ({
       ...p,
       amnities: p.amnities ? JSON.parse(p.amnities) : [],
       pictures: p.pictures ? JSON.parse(p.pictures) : [],
     }));
-    return res.json(parsed);
+    res.json(parsed);
   } catch (err) {
-    console.error('owner error', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Owner fetch error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Upload images for property
-route.post('/:id/images', upload.array('images', 12), async (req, res) => {
+// ✅ MARK PROPERTY AS RENTED / AVAILABLE
+route.put("/:id/availability", async (req, res) => {
   try {
     const id = req.params.id;
-    const files = req.files || [];
-    const urls = files.map(f => `/uploads/${f.filename}`);
-    // Append to existing pictures field
-    const product = await db.findBy('product', 'id', id);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    const pictures = product.pictures ? JSON.parse(product.pictures) : [];
-    const newPictures = pictures.concat(urls);
-    await db.update('product', { pictures: JSON.stringify(newPictures) }, 'id', id);
-    return res.json({ uploaded: urls });
+    const { availability } = req.body;
+
+    if (!availability)
+      return res.status(400).json({ error: "Availability status required" });
+
+    await db.update("product", { availability }, "id", id);
+    const updated = await db.findBy("product", "id", id);
+
+    if (updated.amnities) updated.amnities = JSON.parse(updated.amnities);
+    if (updated.pictures) updated.pictures = JSON.parse(updated.pictures);
+
+    res.json({ message: `✅ Property marked as ${availability}`, updated });
   } catch (err) {
-    console.error('upload images error', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Availability update error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Update product
-route.put('/:id', async (req, res) => {
+// ✅ UPLOAD PROPERTY IMAGES
+route.post("/:id/images", upload.array("images", 12), async (req, res) => {
+  try {
+    const id = req.params.id;
+    const files = req.files.map((f) => `/uploads/${f.filename}`);
+    const product = await db.findBy("product", "id", id);
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    const pictures = product.pictures ? JSON.parse(product.pictures) : [];
+    const newPictures = [...pictures, ...files];
+    await db.update("product", { pictures: JSON.stringify(newPictures) }, "id", id);
+
+    res.json({ uploaded: files });
+  } catch (err) {
+    console.error("Image upload error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ✅ UPDATE PRODUCT DETAILS
+route.put("/:id", async (req, res) => {
   try {
     const id = req.params.id;
     const updates = req.body;
-    if (updates.amnities && Array.isArray(updates.amnities)) updates.amnities = JSON.stringify(updates.amnities);
-    if (updates.pictures && Array.isArray(updates.pictures)) updates.pictures = JSON.stringify(updates.pictures);
-    await db.update('product', updates, 'id', id);
-    const updated = await db.findBy('product', 'id', id);
-    if (updated.amnities) updated.amnities = JSON.parse(updated.amnities);
-    if (updated.pictures) updated.pictures = JSON.parse(updated.pictures);
-    return res.json(updated);
+
+    if (Array.isArray(updates.amnities))
+      updates.amnities = JSON.stringify(updates.amnities);
+    if (Array.isArray(updates.pictures))
+      updates.pictures = JSON.stringify(updates.pictures);
+
+    await db.update("product", updates, "id", id);
+    const updated = await db.findBy("product", "id", id);
+    res.json(updated);
   } catch (err) {
-    console.error('PUT product error', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("PUT product error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Boost product (simple implementation)
-route.post('/:id/boost', async (req, res) => {
+// ✅ BOOST PRODUCT
+route.post("/:id/boost", async (req, res) => {
   try {
     const id = req.params.id;
-    const { planId, duration, paymentRef } = req.body;
-    // We'll store boost as a number timestamp in 'boost' column (expiresAt)
+    const { duration } = req.body;
     const now = Date.now();
     const days = Number(duration) || 7;
     const expiresAt = now + days * 24 * 60 * 60 * 1000;
-    await db.update('product', { boost: expiresAt }, 'id', id);
-    return res.json({ boostId: `${id}-${Date.now()}`, expiresAt, status: 'active' });
-  } catch (err) {
-    console.error('boost error', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
-// Get boost status
-route.get('/:id/boost-status', async (req, res) => {
-  try {
-    const id = req.params.id;
-    const product = await db.findBy('product', 'id', id);
-    if (!product) return res.status(404).json({ error: 'Product not found' });
-    const expiresAt = Number(product.boost) || 0;
-    const status = expiresAt > Date.now() ? 'active' : 'inactive';
-    return res.json({ expiresAt, status });
+    await db.update("product", { boost: expiresAt }, "id", id);
+    res.json({ status: "active", expiresAt });
   } catch (err) {
-    console.error('boost-status error', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error("Boost error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -187,49 +191,16 @@ route.get('/:id/boost-status', async (req, res) => {
 route.get("/get/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    const data = await db.findBy("product", "id", id);
+    const product = await db.findBy("product", "id", id);
+    if (!product) return res.status(404).json({ error: "Product not found" });
 
-    if (!data) return res.status(404).json({ error: "Product not found" });
+    if (product.amnities) product.amnities = JSON.parse(product.amnities);
+    if (product.pictures) product.pictures = JSON.parse(product.pictures);
 
-    if (data.amnities) data.amnities = JSON.parse(data.amnities);
-    if (data.pictures) data.pictures = JSON.parse(data.pictures);
-
-    return res.status(200).json(data);
+    res.json(product);
   } catch (err) {
-    console.error("Error getting product:", err);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-// ✅ GET ALL PRODUCTS BY LOGIN (email + password)
-route.post("/getByLogin", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password)
-      return res.status(400).json({ error: "Email and password required" });
-
-    try {
-      await db.authLogin({ email, password });
-    } catch (err) {
-      return res.status(400).json({ error: "Invalid credentials" });
-    }
-
-    const data = await db.findAllBy("product", "owneremail", email);
-
-    if (!data || data.length === 0)
-      return res.status(404).json({ message: "No products found for this user" });
-
-    const parsed = data.map((p) => ({
-      ...p,
-      amnities: p.amnities ? JSON.parse(p.amnities) : [],
-      pictures: p.pictures ? JSON.parse(p.pictures) : [],
-    }));
-
-    return res.status(200).json(parsed);
-  } catch (err) {
-    console.error("Error fetching user products:", err);
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("Get product error:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
