@@ -1,10 +1,9 @@
-const db = require('./database/SqliteAuto');
-const multer = require('multer');
 const express = require('express');
-const fs = require('fs');
 const cors = require('cors');
-const path = require('path'); // Add path module
-const port = 2100;
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const db = require('./database/SqliteAuto');
 
 const app = express();
 app.use(cors());
@@ -19,15 +18,14 @@ if (!fs.existsSync(uploadDir)) {
 // Serve uploaded files
 app.use('/uploads', express.static(uploadDir));
 
-// Initialize the database
+// Initialize database
 db.init("dormDash.db", true);
 
-// Health check route 
+// Routes
 app.get('/', (req, res) => {
-  return res.json({message: "Server is Running"})
+  res.json({ message: 'Server is running' });
 });
 
-// Routes
 app.use('/auth', require('./routes/auth'));
 app.use('/profile', require('./routes/profile'));
 app.use('/product', require('./routes/properties'));
@@ -37,11 +35,8 @@ app.use('/admin', require('./routes/admin'));
 app.use('/agent', require('./routes/agent'));
 app.use('/favorites', require('./routes/favorites'));
 app.use('/reviews', require('./routes/landlord'));
-app.use('/uploads', require('./routes/uploads')); // Add new upload route
-
-// Mount utility routes under /meta to avoid root conflicts
+app.use('/uploads', require('./routes/uploads'));
 app.use('/meta', require('./routes/utility'));
 
-app.listen(port, () => {
-  console.log(`Server Running At http://localhost:${port}`)
-});
+// ✅ Export the app for Vercel
+module.exports = app;
