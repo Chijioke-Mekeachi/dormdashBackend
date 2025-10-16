@@ -23,13 +23,14 @@ db.createTable("product", [
   "rent:num",
   "bedrooms:int",
   "availability:text",
-  "amnities:textarr",
+  "amenities:textarr",   // ✅ fixed spelling
   "boost:int",
   "description:text",
   "contactinfo:text",
   "pictures:textarr",
   "owneremail:text",
 ]);
+
 
 // ✅ CREATE PRODUCT
 route.post("/create", async (req, res) => {

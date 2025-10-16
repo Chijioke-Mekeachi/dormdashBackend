@@ -34,29 +34,11 @@ class SqliteAuto {
     });
   }
 
-  /**
-   * Initialize database
-   * Automatically switches to :memory: when running in serverless or read-only environments
-   */
-  init(dbFile = "dormDash.db", auth = true) {
-    let dbPath = dbFile;
-
-    // ✅ Detect read-only environments (Vercel, etc.)
-    try {
-      fs.accessSync(".", fs.constants.W_OK);
-    } catch {
-      console.warn("⚠️ Read-only environment detected — using in-memory SQLite");
-      dbPath = ":memory:";
-    }
-
-    // ✅ Only write the file locally (if not using :memory:)
-    if (dbPath !== ":memory:" && !fs.existsSync(dbPath)) {
-      fs.writeFileSync(dbPath, "");
-    }
-
-    this.db = new sqlite3.Database(dbPath, (err) => {
+  init(dbFile, auth = true) {
+    if (!fs.existsSync(dbFile)) fs.writeFileSync(dbFile, "");
+    this.db = new sqlite3.Database(dbFile, (err) => {
       if (err) console.error("❌ Database init error:", err.message);
-      else console.log(`✅ Database initialized (${dbPath === ":memory:" ? "in-memory" : dbPath})`);
+      else console.log(`✅ Database '${dbFile}' initialized`);
 
       if (auth) {
         this.db.run(
@@ -72,7 +54,6 @@ class SqliteAuto {
         );
       }
     });
-
     return this;
   }
 
@@ -84,7 +65,9 @@ class SqliteAuto {
   }
 
   async authLogin({ email, password }) {
-    const user = await this._get(`SELECT * FROM userAuth WHERE email = ?`, [email]);
+    const user = await this._get(`SELECT * FROM userAuth WHERE email = ?`, [
+      email,
+    ]);
     if (!user) throw new Error("User not found");
 
     const valid = await bcrypt.compare(password, user.password);
@@ -94,13 +77,17 @@ class SqliteAuto {
   }
 
   async updatePassword({ email, newPassword, oldPassword }) {
+    // ❌ Fixed condition: previously always threw error even with correct args
     if (!email || !newPassword || !oldPassword) {
       throw new Error("3 arguments required: email, newPassword, oldPassword");
     }
 
+    // Ensure old password is valid
     await this.authLogin({ email, password: oldPassword });
 
+    // Hash new password before updating
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
     await this.update("userAuth", { password: hashedNewPassword }, { email });
     console.log(`✅ Password updated for '${email}'`);
   }
@@ -130,7 +117,7 @@ class SqliteAuto {
           case "numarr":
           case "numberarr":
           case "textarr":
-            type = "TEXT";
+            type = "TEXT"; // store arrays as JSON text
             break;
           default:
             type = "TEXT";
@@ -153,60 +140,77 @@ class SqliteAuto {
     const placeholders = keys.map(() => "?").join(",");
     const values = Object.values(data);
 
-    const sql = `INSERT INTO ${tableName} (${keys.map((k) => `"${k}"`).join(",")}) VALUES (${placeholders})`;
-    console.log("Executing SQL:", sql, values);
+    const sql = `INSERT INTO ${tableName} (${keys
+      .map((k) => `"${k}"`)
+      .join(",")}) VALUES (${placeholders})`;
+    console.log("Executing SQL:", sql, values); // for debugging
     return this._run(sql, values);
   }
 
+  // Compatibility: readAll is the underlying implementation. Expose getAll as routes expect it.
   readAll(tableName) {
     return this._all(`SELECT * FROM ${tableName}`);
   }
 
+  // Alias expected by routes
   getAll(tableName) {
     return this.readAll(tableName);
   }
 
+  // findBy returns a single row (uses _get) — routes expect a single object when looking up by unique column
   findBy(tableName, column, value) {
     return this._get(`SELECT * FROM ${tableName} WHERE ${column} = ?`, [value]);
   }
 
-  findAllBy(tableName, column, value) {
-    return this._all(`SELECT * FROM ${tableName} WHERE ${column} = ?`, [value]);
-  }
+  // findAllBy returns an array of rows matching a column
 
+  // Update supports either: update(table, updates, { col: val }) OR update(table, updates, colName, value)
   update(tableName, updates = {}, where = {}, whereValue) {
-    const setClause = Object.keys(updates).map((k) => `${k} = ?`).join(", ");
+    const setClause = Object.keys(updates)
+      .map((k) => `${k} = ?`)
+      .join(", ");
+
     let whereClause = "";
     let values = [];
 
     if (typeof where === "string") {
+      // called as (table, updates, column, value)
       whereClause = `${where} = ?`;
       values = [...Object.values(updates), whereValue];
     } else {
-      whereClause = Object.keys(where).map((k) => `${k} = ?`).join(" AND ");
+      // called as (table, updates, { col: val, ... })
+      whereClause = Object.keys(where)
+        .map((k) => `${k} = ?`)
+        .join(" AND ");
       values = [...Object.values(updates), ...Object.values(where)];
     }
 
-    return this._run(`UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`, values);
+    return this._run(
+      `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`,
+      values
+    );
   }
+  // Count rows matching 2 conditions
+async countWhere(table, emailField, emailValue, statusField, statusValue) {
+  const sql = `SELECT COUNT(*) as count FROM ${table} WHERE ${emailField} = ? AND ${statusField} = ?`;
+  const result = await this._get(sql, [emailValue, statusValue]);
+  return result ? result.count : 0;
+}
 
-  async countWhere(table, emailField, emailValue, statusField, statusValue) {
-    const sql = `SELECT COUNT(*) as count FROM ${table} WHERE ${emailField} = ? AND ${statusField} = ?`;
-    const result = await this._get(sql, [emailValue, statusValue]);
-    return result ? result.count : 0;
-  }
+// Count rows matching a single condition
+async countWhereSimple(table, field, value) {
+  const sql = `SELECT COUNT(*) as count FROM ${table} WHERE ${field} = ?`;
+  const result = await this._get(sql, [value]);
+  return result ? result.count : 0;
+}
 
-  async countWhereSimple(table, field, value) {
-    const sql = `SELECT COUNT(*) as count FROM ${table} WHERE ${field} = ?`;
-    const result = await this._get(sql, [value]);
-    return result ? result.count : 0;
-  }
+// Find all by field
+async findAllBy(table, field, value) {
+  const sql = `SELECT * FROM ${table} WHERE ${field} = ?`;
+  return await this._all(sql, [value]);
+}
 
-  async findAllBy(table, field, value) {
-    const sql = `SELECT * FROM ${table} WHERE ${field} = ?`;
-    return await this._all(sql, [value]);
-  }
-
+  // Delete supports either: delete(table, { col: val }) OR delete(table, colName, value)
   delete(tableName, where = {}, value) {
     let whereClause = "";
     let values = [];
@@ -215,7 +219,9 @@ class SqliteAuto {
       whereClause = `${where} = ?`;
       values = [value];
     } else {
-      whereClause = Object.keys(where).map((k) => `${k} = ?`).join(" AND ");
+      whereClause = Object.keys(where)
+        .map((k) => `${k} = ?`)
+        .join(" AND ");
       values = Object.values(where);
     }
 

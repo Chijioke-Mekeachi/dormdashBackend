@@ -25,8 +25,8 @@ if (!fs.existsSync(dbDir)) {
 }
 
 // ✅ Initialize database (stored locally instead of memory)
-const dbFile = path.join(dbDir, 'data.db');
-db.init(dbFile, true);
+// const dbFile = path.join(dbDir, 'data.db');
+db.init("dormDash.db", true);
 
 // ✅ Routes
 app.get('/', (req, res) => {
