@@ -9,20 +9,26 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Ensure uploads directory exists
+// ✅ Ensure uploads directory exists
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// Serve uploaded files
+// ✅ Serve uploaded files
 app.use('/uploads', express.static(uploadDir));
 
-// Initialize database
-db.init(":memory:", true);
+// ✅ Ensure database folder exists
+const dbDir = path.join(__dirname, 'database');
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir);
+}
 
+// ✅ Initialize database (stored locally instead of memory)
+const dbFile = path.join(dbDir, 'data.db');
+db.init(dbFile, true);
 
-// Routes
+// ✅ Routes
 app.get('/', (req, res) => {
   res.json({ message: 'Server is running' });
 });
@@ -39,5 +45,5 @@ app.use('/reviews', require('./routes/landlord'));
 app.use('/uploads', require('./routes/uploads'));
 app.use('/meta', require('./routes/utility'));
 
-// ✅ Export the app for Vercel
+// ✅ Export the app for Vercel or local
 module.exports = app;
