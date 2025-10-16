@@ -46,4 +46,7 @@ app.use('/uploads', require('./routes/uploads'));
 app.use('/meta', require('./routes/utility'));
 
 // ✅ Export the app for Vercel or local
+app.listen(process.env.PORT || 2100, () => {
+  console.log(`Server is running on port ${process.env.PORT || 2100}`);
+});
 module.exports = app;
